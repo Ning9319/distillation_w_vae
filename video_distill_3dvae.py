@@ -41,7 +41,7 @@ def main(args):
     print('Evaluation iterations: ', eval_it_pool)
     channel, im_size, num_classes, class_names, mean, std, dst_train, dst_test, testloader= get_dataset(args.dataset, args.data_path)
 
-    """Change to only train on the 10% of the original train dataset"""
+    """Change to only train on the 50% of the original train dataset"""
     total_samples = len(dst_train)
     subset_size = int(0.5 * total_samples)
     random_indices = random.sample(range(total_samples), subset_size)
@@ -73,22 +73,6 @@ def main(args):
     vae3d = CVVAEModel.from_pretrained(args.vae_path, subfolder="vae3d", torch_dtype=torch.float16).to(args.device)
     vae3d.requires_grad_(False)  # Freeze VAE weights
 
-    """
-    #Encode real videos into latent space
-    video_all = video_all[:16]
-    video_all = rearrange(video_all, 'b t c h w -> b c t h w').half()
-
-    video_all = video_all / 127.5 - 1.0  # Normalize to [-1, 1]
-
-    video_all = video_all.cuda()
-    print("Shape of video_all:", video_all.shape)
-
-    real_latents = vae3d.encode(video_all).latent_dist.sample()  # Shape: (N, latent_dim, T, H, W)
-    print(f"Shape of real_latents: {real_latents.shape}")
-    
-
-    exit()
-    """
 
 
     model_eval_pool = get_eval_pool(args.eval_mode, args.model, args.model)
@@ -141,7 +125,9 @@ def main(args):
         return imgs.to(args.device)
 
     image_syn = torch.randn(size=(num_classes*args.ipc, args.frames, channel, im_size[0], im_size[1]), dtype=torch.float, requires_grad=True, device=args.device)
-    label_syn = torch.tensor(np.stack([np.ones(args.ipc)*i for i in range(0, num_classes)]), dtype=torch.long, requires_grad=False, device=args.device).view(-1) # [0,0,0, 1,1,1, ..., 9,9,9]
+
+    label_syn = torch.tensor(np.stack([np.ones(args.ipc)*i for i in range(0, num_classes)]), dtype=torch.long, requires_grad=False,device=args.device).view(-1) # [0,0,0, 1,1,1, ..., 9,9,9]
+
     syn_lr = torch.tensor(args.lr_teacher).to(args.device) if args.method == 'MTT' else None
 
     if args.init == 'real':
@@ -237,7 +223,7 @@ def main(args):
                 img_syn = image_syn[c*args.ipc:(c+1)*args.ipc].reshape((args.ipc, args.frames, channel, im_size[0], im_size[1]))
 
                 
-            
+
             """
             net = get_network(args.model, channel, num_classes, im_size).to(args.device)  # get a random model
             net.train()

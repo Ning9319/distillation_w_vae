@@ -4,7 +4,7 @@ LR=$3
 IPC=$4
 
 
-CUDA_VISIBLE_DEVICES=${GPU} python baseline.py \
+CUDA_VISIBLE_DEVICES=${GPU} python video_distill_3dvae.py \
 --method DM \
 --dataset ${DATA} \
 --ipc ${IPC} \
