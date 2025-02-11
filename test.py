@@ -1,2 +1,3 @@
-from opensora.models.vae.vae import VideoAutoencoderPipeline
-vae = VideoAutoencoderPipeline.from_pretrained("hpcai-tech/OpenSora-VAE-v1.2")
+import torch
+print(torch.cuda.device_count())  # Should return a positive number
+print(torch.cuda.get_device_name(0))  # Should return the name of your GPU

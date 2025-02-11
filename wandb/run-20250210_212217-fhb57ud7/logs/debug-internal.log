@@ -1,0 +1,15 @@
+{"time":"2025-02-10T21:22:17.2495119-08:00","level":"INFO","msg":"stream: starting","core version":"0.19.4","symlink path":"C:\\Users\\linin\\OneDrive\\Desktop\\Dataset Condensation\\Video Distillation\\distillation_w_vae\\wandb\\run-20250210_212217-fhb57ud7\\logs\\debug-core.log"}
+{"time":"2025-02-10T21:22:17.3604092-08:00","level":"INFO","msg":"created new stream","id":"fhb57ud7"}
+{"time":"2025-02-10T21:22:17.3610416-08:00","level":"INFO","msg":"stream: started","id":"fhb57ud7"}
+{"time":"2025-02-10T21:22:17.3610416-08:00","level":"INFO","msg":"writer: Do: started","stream_id":"fhb57ud7"}
+{"time":"2025-02-10T21:22:17.3610416-08:00","level":"INFO","msg":"handler: started","stream_id":"fhb57ud7"}
+{"time":"2025-02-10T21:22:17.3610416-08:00","level":"INFO","msg":"sender: started","stream_id":"fhb57ud7"}
+{"time":"2025-02-10T21:22:17.5687845-08:00","level":"INFO","msg":"Starting system monitor"}
+{"time":"2025-02-10T21:22:21.3152621-08:00","level":"INFO","msg":"stream: closing","id":"fhb57ud7"}
+{"time":"2025-02-10T21:22:21.3152621-08:00","level":"INFO","msg":"Stopping system monitor"}
+{"time":"2025-02-10T21:22:21.3182297-08:00","level":"INFO","msg":"Stopped system monitor"}
+{"time":"2025-02-10T21:22:21.7499109-08:00","level":"INFO","msg":"fileTransfer: Close: file transfer manager closed"}
+{"time":"2025-02-10T21:22:21.9162825-08:00","level":"INFO","msg":"handler: closed","stream_id":"fhb57ud7"}
+{"time":"2025-02-10T21:22:21.9162825-08:00","level":"INFO","msg":"writer: Close: closed","stream_id":"fhb57ud7"}
+{"time":"2025-02-10T21:22:21.9162825-08:00","level":"INFO","msg":"sender: closed","stream_id":"fhb57ud7"}
+{"time":"2025-02-10T21:22:21.9162825-08:00","level":"INFO","msg":"stream: closed","id":"fhb57ud7"}
