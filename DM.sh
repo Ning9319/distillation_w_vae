@@ -13,10 +13,10 @@ CUDA_VISIBLE_DEVICES=${GPU} python video_distill_3dvae.py \
 --init real \
 --lr_img ${LR} \
 --lr_net 0.01 \
---Iteration 5000 \
+--Iteration 3000 \
 --model ConvNet3D \
 --eval_mode SS \
 --eval_it 500 \
---batch_real 16 \
+--batch_real 64 \
 --num_workers 4 \
 --preload \

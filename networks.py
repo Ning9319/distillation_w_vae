@@ -812,3 +812,5 @@ class ConvNet3D(nn.Module):
                 shape_feat[3] //= 2
 
         return nn.Sequential(*layers), shape_feat
+
+

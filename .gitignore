@@ -1,3 +1,5 @@
 test.py
 distill_utils/data/HMDB51/jpegs_112
 vae_weights
+logged_files
+wandb

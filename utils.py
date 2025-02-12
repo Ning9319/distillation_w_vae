@@ -15,7 +15,6 @@ from scipy.ndimage.interpolation import rotate as scipyrotate
 import tqdm
 from distill_utils.dataset import Kinetics400, UCF101, HMDB51, miniUCF101, staticHMDB51, staticUCF101, staticUCF50, singleSSv2, singleKinetics400
 from networks import MLP, ConvNet, LeNet, AlexNet, AlexNetBN, VGG11, VGG11BN, ResNet18, ResNet18BN_AP, ResNet18BN, VideoConvNetMean, VideoConvNetMLP, VideoConvNetLSTM, VideoConvNetRNN, VideoConvNetGRU, ConvNet3D
-from VAE import *
 
 
 # @lru_cache()
@@ -456,7 +455,7 @@ def get_dataset(dataset, data_path, num_workers=0,img_size=(112,112),split_num=1
 
     else:
         exit('unknown dataset: %s'%dataset)
-
+    
     testloader = torch.utils.data.DataLoader(dst_test, batch_size=64, shuffle=False, num_workers=num_workers)
     return channel, im_size, num_classes, class_names, mean, std, dst_train, dst_test, testloader
 
@@ -608,8 +607,7 @@ def get_network(model, channel, num_classes, im_size=(32, 32), frames = 16, dist
         net = VideoConvNetGRU(channel=channel, num_classes=num_classes, net_width=net_width, net_depth=net_depth, net_act=net_act, net_norm=net_norm, net_pooling=net_pooling, im_size=im_size)
     elif model == 'ConvNet3D':
         net = ConvNet3D(channel=channel, num_classes=num_classes, net_width=net_width, net_depth=net_depth, net_act=net_act, net_norm='none', net_pooling='maxpooling', im_size=im_size,frames=frames)
-    elif model == 'VAE3D':
-        net = VAE3D(channel=channel, num_classes=num_classes, net_width=net_width, net_depth=net_depth, net_act=net_act, net_norm='none', net_pooling='maxpooling', im_size=im_size,frames=frames)
+
     else:
         net = None
         exit('unknown model: %s'%model)
