@@ -3,3 +3,9 @@ distill_utils/data/HMDB51/jpegs_112
 vae_weights
 logged_files
 wandb
+__pycache__
+.DS_Store
+
+# VAE models
+original_vae
+quantized_vae

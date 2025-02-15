@@ -1,0 +1,8 @@
+diffusers
+torch
+torchvision
+transformers
+accelerate
+optimum-quanto
+safetensors
+numpy
