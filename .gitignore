@@ -5,6 +5,7 @@ logged_files
 wandb
 __pycache__
 .DS_Store
+images
 
 # VAE models
 original_vae

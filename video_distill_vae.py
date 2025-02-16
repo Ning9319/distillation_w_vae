@@ -16,6 +16,7 @@ import warnings
 from torch.utils.data import Subset
 import torch.optim as optim
 from einops import rearrange
+from diffusers.models import AutoencoderKL
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
@@ -25,7 +26,7 @@ def main(args):
 
     torch.cuda.set_device(0)  # Ensure it uses the correct device
     print(f"Using GPU: {torch.cuda.get_device_name(0)}")
-    from models.modeling_vae import CVVAEModel
+    
 
     if args.outer_loop is None and args.inner_loop is None:
         args.outer_loop, args.inner_loop = get_loops(args.ipc)
@@ -41,13 +42,14 @@ def main(args):
     print('Evaluation iterations: ', eval_it_pool)
     channel, im_size, num_classes, class_names, mean, std, dst_train, dst_test, testloader= get_dataset(args.dataset, args.data_path)
 
-    """
+    
+    
     #Change to only train on the 50% of the original train dataset
     total_samples = len(dst_train)
     subset_size = int(0.5 * total_samples)
     random_indices = random.sample(range(total_samples), subset_size)
     dst_train = Subset(dst_train, random_indices)
-    """
+    
 
     
 
@@ -63,12 +65,16 @@ def main(args):
     video_all = torch.stack(video_all)
     label_all = torch.tensor(label_all)
 
-    vae3d = CVVAEModel.from_pretrained(args.vae_path, subfolder="vae3d", torch_dtype=torch.float16).to(args.device) # float16 for matching the real_video in the latent space
-    vae3d.requires_grad_(False)  # Freeze VAE weights
+
+    vae = AutoencoderKL.from_pretrained(args.vae_path, torch_dtype = torch.float32).to(args.device)
+    vae.requires_grad_(False)
+    N = video_all.shape[0]
+    video_all = rearrange(video_all, "b f c h w -> (b f) c h w") # Merge batch & frames
+
+    video_all = video_all / 127.5 - 1.0
+    
 
     #Encode all the videos into the latent space
-    video_all = rearrange(video_all, 'b t c h w -> b c t h w').half()
-    video_all= video_all/ 127.5 - 1.0
     encode_batch_size = 4
     num_batches = len(video_all) // encode_batch_size + (1 if len(video_all) % encode_batch_size > 0 else 0)
     video_latent = []
@@ -76,22 +82,14 @@ def main(args):
     for i in trange(num_batches):
         batch = video_all[i*encode_batch_size : (i+1)*encode_batch_size]
         batch = batch.to(args.device)
-        latents = vae3d.encode(batch).latent_dist.sample()
+        latents = vae.encode(batch).latent_dist.sample()
         video_latent.append(latents) 
     video_all = torch.cat(video_latent, dim=0)
 
-    video_all = rearrange(video_all, 'b c t h w -> b t c h w')
-    video_all = video_all.to(torch.float32)
+    video_all = rearrange(video_all, "(b f) c h w -> b f c h w", b=N)
     print("The tensor in the latent space with size:", video_all.shape)  # [B, T, C, H, W]
     dst_train = torch.utils.data.TensorDataset(video_all, label_all)
     
-
-    #syn_video, _ = dst_train.tensors
-    #print("Size of the video_all", syn_video.shape)
-    
-
-
-
 
     model_eval_pool = get_eval_pool(args.eval_mode, args.model, args.model)
 
@@ -144,7 +142,7 @@ def main(args):
     
     
     latent_im_size = [video_all.shape[-2], video_all.shape[-1]]
-    image_syn = torch.randn(size=(num_classes*args.ipc, video_all.shape[-4], video_all.shape[-3], latent_im_size[0], latent_im_size[1]), dtype=torch.float, requires_grad=True, device=args.device)
+    image_syn = torch.randn(size=(num_classes*args.ipc, video_all.shape[-4], video_all.shape[-3], latent_im_size[0], latent_im_size[1]), dtype=torch.float, requires_grad=False, device=args.device)
 
     label_syn = torch.tensor(np.stack([np.ones(args.ipc)*i for i in range(0, num_classes)]), dtype=torch.long, requires_grad=False,device=args.device).view(-1) # [0,0,0, 1,1,1, ..., 9,9,9]
 
@@ -161,15 +159,18 @@ def main(args):
 
     
     ''' training '''
-    image_syn = image_syn.detach().to(args.device).requires_grad_(True) # [B, T, C, H, W]
-    optimizer_img = torch.optim.SGD([image_syn, ], lr=args.lr_img, momentum=0.5) # optimizer_img for synthetic data
-    optimizer_img.zero_grad()
+    # image_syn = image_syn.detach().to(args.device).requires_grad_(True) # [B, T, C, H, W]
+    # optimizer_img = torch.optim.SGD([image_syn, ], lr=args.lr_img, momentum=0.5) # optimizer_img for synthetic data
+    # optimizer_img.zero_grad()
 
 
-    print('%s training begins'%get_time())
+    # print('%s training begins'%get_time())
 
     best_acc = {m: 0 for m in model_eval_pool}
     best_std = {m: 0 for m in model_eval_pool}
+
+
+
     
 
     if args.method == "DM":
@@ -187,19 +188,20 @@ def main(args):
                         image_syn_eval, label_syn_eval = image_syn.detach().clone(), label_syn.detach().clone() # avoid any unaware modification
                 
                         # Applying the decoder to the image_syn_eval
-                        image_syn_eval = image_syn_eval.half()
-                        image_syn_eval = rearrange(image_syn_eval, 'b t c h w -> b c t h w') # [B, C, T, H, W]
+    
+                        B = image_syn_eval.shape[0]
+                        image_syn_eval = rearrange(image_syn_eval, "b f c h w -> (b f) c h w") # Merge batch & frames
                         reconstructed_videos = []
                         decode_num_batches = len(image_syn_eval) // encode_batch_size + (1 if len(image_syn_eval) % encode_batch_size > 0 else 0)
                         for i in trange(decode_num_batches):
                             batch = image_syn_eval[i * encode_batch_size : (i + 1) * encode_batch_size]
                             batch = batch.to(args.device)
-                            decoded_batch  = vae3d.decode(batch).sample
+                            decoded_batch  = vae.decode(batch).sample
                             reconstructed_videos.append(decoded_batch)
                         image_syn_eval = torch.cat(reconstructed_videos, dim=0)
 
                         image_syn_eval = (torch.clamp(image_syn_eval,-1.0,1.0) + 1.0) * 127.5
-                        image_syn_eval = rearrange(image_syn_eval, 'b c t h w -> b t c h w')
+                        image_syn_eval = rearrange(image_syn_eval, "(b f) c h w -> b f c h w", b=B)
                         
                         print("\nThe image_syn_eval has size of", image_syn_eval.data.shape, "\n") # [B, T, C, H, W]
 
@@ -241,7 +243,7 @@ def main(args):
                 param.requires_grad = False
 
             embed = net.module.embed if args.distributed else net.embed
-            """
+            
 
             loss_avg = 0
 
@@ -265,7 +267,7 @@ def main(args):
             
 
             wandb.log({"Loss": loss_avg}, step=it)
-   
+            """
 
     wandb.finish()
 
@@ -317,7 +319,7 @@ if __name__ == '__main__':
     parser.add_argument('--save_path',type=str, default='./logged_files', help='path to save')
     parser.add_argument('--frames', type=int, default=16, help='')
 
-    parser.add_argument('--vae_path', type=str, default="./vae_weights/3d_vae", help="iterations of training the 3d-vae")
+    parser.add_argument('--vae_path', type=str, default="./vae_weights/2d_vae", help="iterations of training the 3d-vae")
 
 
 
