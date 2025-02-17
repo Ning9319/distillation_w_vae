@@ -1,5 +1,6 @@
 test.py
 distill_utils/data/HMDB51/jpegs_112
+distill_utils/data/HMDB51/jpegs_112.rar
 vae_weights
 logged_files
 wandb
