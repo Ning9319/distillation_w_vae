@@ -6,3 +6,6 @@ accelerate
 optimum-quanto
 safetensors
 numpy
+scipy
+einops
+wandb
