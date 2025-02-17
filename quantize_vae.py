@@ -10,7 +10,7 @@ import json
 import psutil
 import os
 
-VAE_MODEL = "stabilityai/sd-vae-ft-mse"
+VAE_MODEL = "./vae_weights/2d_vae"
 
 def save_quantized_vae():
     """
@@ -30,16 +30,18 @@ def save_quantized_vae():
         json.dump(quantization_map(vae), f)
 
 def use_quantized_vae():
+    """
     if (not (os.path.exists('./quantized_vae/quantized_vae.safetensors') and os.path.exists('./quantized_vae/quantization_map.json'))):
         save_quantized_vae()
     if (not (os.path.exists('./original_vae/config.json'))):
         vae = AutoencoderKL.from_pretrained(VAE_MODEL)
         vae.save_pretrained('./original_vae')
+    """
 
     state_dict = load_file('./quantized_vae/quantized_vae.safetensors')
     with open('./quantized_vae/quantization_map.json', 'r') as f:
         quantization_map = json.load(f)
-    with open('./original_vae/config.json') as f:
+    with open(os.path.join(VAE_MODEL, 'config.json')) as f:
         vae_config = json.load(f)
 
     # process = psutil.Process()
@@ -120,6 +122,8 @@ def test(imgpath):
     qdecoded = decode_img(qlatents, vaeq)
     qimg_name = "q_decoded_" + os.path.basename(imgpath)
     save_image(qdecoded, os.path.join(os.path.dirname(imgpath), qimg_name))
-    
+
+"""
 test("test_images/astronaut.png")
 test("test_images/smile.jpg")
+"""

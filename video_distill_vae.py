@@ -17,6 +17,7 @@ from torch.utils.data import Subset
 import torch.optim as optim
 from einops import rearrange
 from diffusers.models import AutoencoderKL
+from quantize_vae import use_quantized_vae
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
@@ -43,13 +44,13 @@ def main(args):
     channel, im_size, num_classes, class_names, mean, std, dst_train, dst_test, testloader= get_dataset(args.dataset, args.data_path)
 
     
-    
+    """
     #Change to only train on the 50% of the original train dataset
     total_samples = len(dst_train)
     subset_size = int(0.5 * total_samples)
     random_indices = random.sample(range(total_samples), subset_size)
     dst_train = Subset(dst_train, random_indices)
-    
+    """
 
     
 
@@ -66,7 +67,7 @@ def main(args):
     label_all = torch.tensor(label_all)
 
 
-    vae = AutoencoderKL.from_pretrained(args.vae_path, torch_dtype = torch.float32).to(args.device)
+    vae = use_quantized_vae().to(args.device)
     vae.requires_grad_(False)
     N = video_all.shape[0]
     video_all = rearrange(video_all, "b f c h w -> (b f) c h w") # Merge batch & frames
@@ -96,6 +97,8 @@ def main(args):
     accs_all_exps = dict()  # record performances of all experiments
     for key in model_eval_pool:
         accs_all_exps[key] = []
+
+
 
     project_name = "Latent_Video_{}".format(args.method)
 
@@ -157,6 +160,9 @@ def main(args):
         print('initialize synthetic data from random noise')
  
 
+    torch.save(image_syn, "./logged_files/syn_tensor_1ipc.pt")
+
+    exit()
     
     ''' training '''
     # image_syn = image_syn.detach().to(args.device).requires_grad_(True) # [B, T, C, H, W]
