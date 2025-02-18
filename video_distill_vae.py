@@ -28,12 +28,13 @@ def main(args):
     torch.cuda.set_device(0)  # Ensure it uses the correct device
     print(f"Using GPU: {torch.cuda.get_device_name(0)}")
     
-
+    """
     if args.outer_loop is None and args.inner_loop is None:
         args.outer_loop, args.inner_loop = get_loops(args.ipc)
     elif args.outer_loop is None or args.inner_loop is None:
         raise ValueError(f"Please set neither or both outer/inner_loop: {args.outer_loop}, {args.inner_loop}")
     print('outer_loop = %d, inner_loop = %d'%(args.outer_loop, args.inner_loop))
+    """
 
     print("CUDNN STATUS: {}".format(torch.backends.cudnn.enabled))
 

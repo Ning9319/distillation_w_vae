@@ -41,7 +41,7 @@ def use_quantized_vae():
     state_dict = load_file('./quantized_vae/quantized_vae.safetensors')
     with open('./quantized_vae/quantization_map.json', 'r') as f:
         quantization_map = json.load(f)
-    with open(os.path.join(VAE_MODEL, 'config.json')) as f:
+    with open('./quantized_vae/config.json', 'r') as f:
         vae_config = json.load(f)
 
     # process = psutil.Process()
