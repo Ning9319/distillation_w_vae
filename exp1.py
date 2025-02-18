@@ -27,14 +27,6 @@ def main(args):
 
     torch.cuda.set_device(0)  # Ensure it uses the correct device
     print(f"Using GPU: {torch.cuda.get_device_name(0)}")
-    
-    """
-    if args.outer_loop is None and args.inner_loop is None:
-        args.outer_loop, args.inner_loop = get_loops(args.ipc)
-    elif args.outer_loop is None or args.inner_loop is None:
-        raise ValueError(f"Please set neither or both outer/inner_loop: {args.outer_loop}, {args.inner_loop}")
-    print('outer_loop = %d, inner_loop = %d'%(args.outer_loop, args.inner_loop))
-    """
 
     print("CUDNN STATUS: {}".format(torch.backends.cudnn.enabled))
 
@@ -44,16 +36,6 @@ def main(args):
     print('Evaluation iterations: ', eval_it_pool)
     channel, im_size, num_classes, class_names, mean, std, dst_train, dst_test, testloader= get_dataset(args.dataset, args.data_path)
 
-    
-    """
-    #Change to only train on the 50% of the original train dataset
-    total_samples = len(dst_train)
-    subset_size = int(0.5 * total_samples)
-    random_indices = random.sample(range(total_samples), subset_size)
-    dst_train = Subset(dst_train, random_indices)
-    """
-
-    
 
     
     print("Preloading dataset")
@@ -93,7 +75,7 @@ def main(args):
     label_syn = torch.tensor(np.stack([np.ones(args.ipc)*i for i in range(0, num_classes)]), dtype=torch.long, requires_grad=False,device=args.device).view(-1) # [0,0,0, 1,1,1, ..., 9,9,9]
 
     if args.init == 'real':
-        print('initialize synthetic data from random real images in the latent space')
+        print('initialize synthetic data from random real images in the pixel space')
         for c in range(0, num_classes):
             i = c 
             image_syn.data[i*args.ipc:(i+1)*args.ipc] = get_images(c, args.ipc).detach().data

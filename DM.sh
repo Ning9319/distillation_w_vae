@@ -4,11 +4,11 @@ LR=$3
 IPC=$4
 
 
-CUDA_VISIBLE_DEVICES=${GPU} python video_distill_vae.py \
+CUDA_VISIBLE_DEVICES=${GPU} python exp1.py \
 --method DM \
 --dataset ${DATA} \
 --ipc ${IPC} \
---num_eval 5 \
+--num_eval 3 \
 --epoch_eval_train 500 \
 --init real \
 --lr_img ${LR} \
