@@ -804,6 +804,8 @@ def epoch(mode, dataloader, net, optimizer, criterion, args):
                 output = net(img)
                 loss = criterion(output, lab)
                 acc = np.sum(np.equal(np.argmax(output.cpu().data.numpy(), axis=-1), lab.cpu().data.numpy()))
+                # Remove the following for just caculating the top-1 acc, which is same as acc:
+                """
                 top1_preds = np.argsort(output.cpu().data.numpy(), axis=-1)[:, -1:]
                 top1_matched = np.array([lab.cpu().data.numpy()[i] in top1_preds[i] for i in range(len(lab))])
                 top1_acc = np.sum(top1_matched)
@@ -813,22 +815,22 @@ def epoch(mode, dataloader, net, optimizer, criterion, args):
                 top5_preds = np.argsort(output.cpu().data.numpy(), axis=-1)[:, -5:]
                 top5_matched = np.array([lab.cpu().data.numpy()[i] in top5_preds[i] for i in range(len(lab))])
                 top5_acc = np.sum(top5_matched)
-
+                """
                 for y, c in zip(lab.cpu().tolist(), np.equal(np.argmax(output.cpu().data.numpy(), axis=-1), lab.cpu().data.numpy()).tolist()):
                     correct_per_class[y].append(c)
 
                 loss_avg += loss.item()*n_b
                 acc_avg += acc
-                top5_acc_avg += top5_acc
-                top3_acc_avg += top3_acc
-                top1_acc_avg += top1_acc
+                #top5_acc_avg += top5_acc
+                #top3_acc_avg += top3_acc
+                #top1_acc_avg += top1_acc
                 num_exp += n_b
 
     loss_avg /= num_exp
     acc_avg /= num_exp
-    top5_acc_avg /= num_exp
-    top3_acc_avg /= num_exp
-    top1_acc_avg /= num_exp
+    #top5_acc_avg /= num_exp
+    #top3_acc_avg /= num_exp
+    #top1_acc_avg /= num_exp
 
     top_acc_avg = [acc_avg, top1_acc_avg, top3_acc_avg, top5_acc_avg]
 

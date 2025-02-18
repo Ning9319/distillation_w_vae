@@ -28,13 +28,6 @@ def main(args):
     torch.cuda.set_device(0)  # Ensure it uses the correct device
     print(f"Using GPU: {torch.cuda.get_device_name(0)}")
     
-    """
-    if args.outer_loop is None and args.inner_loop is None:
-        args.outer_loop, args.inner_loop = get_loops(args.ipc)
-    elif args.outer_loop is None or args.inner_loop is None:
-        raise ValueError(f"Please set neither or both outer/inner_loop: {args.outer_loop}, {args.inner_loop}")
-    print('outer_loop = %d, inner_loop = %d'%(args.outer_loop, args.inner_loop))
-    """
 
     print("CUDNN STATUS: {}".format(torch.backends.cudnn.enabled))
 
@@ -45,16 +38,6 @@ def main(args):
     channel, im_size, num_classes, class_names, mean, std, dst_train, dst_test, testloader= get_dataset(args.dataset, args.data_path)
 
     
-    """
-    #Change to only train on the 50% of the original train dataset
-    total_samples = len(dst_train)
-    subset_size = int(0.5 * total_samples)
-    random_indices = random.sample(range(total_samples), subset_size)
-    dst_train = Subset(dst_train, random_indices)
-    """
-
-    
-
     
     print("Preloading dataset")
     video_all = []
@@ -77,7 +60,7 @@ def main(args):
     
 
     #Encode all the videos into the latent space
-    encode_batch_size = 4
+    encode_batch_size = 8
     num_batches = len(video_all) // encode_batch_size + (1 if len(video_all) % encode_batch_size > 0 else 0)
     video_latent = []
     print("\nEncoding the real videos into the latent space\n")
@@ -101,7 +84,7 @@ def main(args):
 
 
 
-    project_name = "Latent_Video_{}".format(args.method)
+    project_name = "Latent_exp_4"
 
     
     wandb.init(sync_tensorboard=False,
@@ -134,7 +117,7 @@ def main(args):
     print("BUILDING DATASET")
     for i, lab in tqdm(enumerate(labels_all)):
         indices_class[lab].append(i)
-    labels_all = torch.tensor(labels_all, dtype=torch.long, device="cpu")
+    labels_all = torch.tensor(labels_all, dtype=torch.long, device=args.device)
 
     def get_images(c, n):  # get random n images from class c
         idx_shuffle = np.random.permutation(indices_class[c])[:n]
@@ -150,8 +133,7 @@ def main(args):
 
     label_syn = torch.tensor(np.stack([np.ones(args.ipc)*i for i in range(0, num_classes)]), dtype=torch.long, requires_grad=False,device=args.device).view(-1) # [0,0,0, 1,1,1, ..., 9,9,9]
 
-    #syn_lr = torch.tensor(args.lr_teacher).to(args.device) if args.method == 'MTT' else None
-
+    """
     if args.init == 'real':
         print('initialize synthetic data from random real images in the latent space')
         for c in range(0, num_classes):
@@ -159,17 +141,12 @@ def main(args):
             image_syn.data[i*args.ipc:(i+1)*args.ipc] = get_images(c, args.ipc).detach().data
     else:
         print('initialize synthetic data from random noise')
- 
+    """
 
     #torch.save(image_syn, "./logged_files/syn_tensor_1ipc.pt")
 
-    #exit()
     
     ''' training '''
-    # image_syn = image_syn.detach().to(args.device).requires_grad_(True) # [B, T, C, H, W]
-    # optimizer_img = torch.optim.SGD([image_syn, ], lr=args.lr_img, momentum=0.5) # optimizer_img for synthetic data
-    # optimizer_img.zero_grad()
-
 
     # print('%s training begins'%get_time())
 
@@ -192,7 +169,7 @@ def main(args):
                     accs_train = []
                     for it_eval in range(args.num_eval):
                         net_eval = get_network(model_eval, channel, num_classes, im_size).to(args.device)  # get a random model
-                        image_syn_eval, label_syn_eval = image_syn.detach().clone(), label_syn.detach().clone() # avoid any unaware modification
+                        image_syn_eval, label_syn_eval = video_all.detach().clone(), labels_all.detach().clone() # avoid any unaware modification
                 
                         # Applying the decoder to the image_syn_eval
     
@@ -213,7 +190,7 @@ def main(args):
                         print("\nThe image_syn_eval has size of", image_syn_eval.data.shape, "\n") # [B, T, C, H, W]
 
                         
-                        _, acc_train, acc_test, acc_per_cls = evaluate_synset(it_eval, net_eval, image_syn_eval, label_syn_eval, testloader, args, mode='none',test_freq=100)
+                        _, acc_train, acc_test, acc_per_cls = evaluate_synset(it_eval, net_eval, image_syn_eval.to(args.device), label_syn_eval.to(args.device), testloader, args, mode='none',test_freq=100)
 
                         accs_test.append(acc_test)
                         accs_train.append(acc_train)
@@ -242,40 +219,6 @@ def main(args):
                 if save_this_best_ckpt:
                     save_this_best_ckpt = False
                     torch.save(image_save.cpu(), os.path.join(save_dir, "images_best.pt"))
-
-            """
-            net = get_network(args.model, video_all.shape[-3], num_classes, latent_im_size, frames=video_all.shape[-4]).to(args.device)  # get a random model
-            net.train()
-            for param in list(net.parameters()):
-                param.requires_grad = False
-
-            embed = net.module.embed if args.distributed else net.embed
-            
-
-            loss_avg = 0
-
-            loss = torch.tensor(0.0).to(args.device)
-            for c in range(0,num_classes):
-                img_real = get_images(c, args.batch_real)
-                img_syn = image_syn[c*args.ipc:(c+1)*args.ipc].reshape((args.ipc, video_all.shape[-4], video_all.shape[-3], latent_im_size[0], latent_im_size[1]))
-
-                # output_real = embed(img_real).detach()
-                # output_syn = embed(img_syn)
-
-                #loss += torch.sum((torch.mean(output_real, dim=0) - torch.mean(output_syn, dim=0))**2)
-                loss += torch.sum((torch.mean(img_real, dim=0) - torch.mean(img_syn, dim=0))**2)
-
-            optimizer_img.zero_grad()
-            loss.backward()
-            optimizer_img.step()
-            loss_avg += loss.item()
-
-            loss_avg /= (num_classes)
-            
-
-            wandb.log({"Loss": loss_avg}, step=it)
-            """
-
     wandb.finish()
 
 if __name__ == '__main__':
@@ -288,7 +231,7 @@ if __name__ == '__main__':
     parser.add_argument('--ipc', type=int, default=1, help='image(s) per class')
 
     parser.add_argument('--eval_mode', type=str, default='S',
-                        help='use 5 to eval top5 accuracy, use S to eval single accuracy')
+                        help='use top5 to eval top5 accuracy, use S to eval single accuracy')
     
     parser.add_argument('--outer_loop', type=int, default=None, help='')
     parser.add_argument('--inner_loop', type=int, default=None, help='')

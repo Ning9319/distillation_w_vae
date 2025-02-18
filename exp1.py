@@ -66,31 +66,62 @@ def main(args):
     
     video_all = torch.stack(video_all)
     label_all = torch.tensor(label_all)
+    dst_train = torch.utils.data.TensorDataset(video_all, label_all)
+
+    ''' organize the real dataset '''
+    labels_all = label_all if args.preload else dst_train.labels
+    indices_class = [[] for c in range(num_classes)]
+
+    print("BUILDING DATASET")
+    for i, lab in tqdm(enumerate(labels_all)):
+        indices_class[lab].append(i)
+    labels_all = torch.tensor(labels_all, dtype=torch.long, device="cpu")
+
+    def get_images(c, n):  # get random n images from class c
+        idx_shuffle = np.random.permutation(indices_class[c])[:n]
+        if n == 1:  
+            imgs = dst_train[idx_shuffle[0]][0].unsqueeze(0)
+        else:
+            imgs = torch.cat([dst_train[i][0].unsqueeze(0) for i in idx_shuffle], 0)
+        return imgs.to(args.device)
 
 
+    # Sample the syn_video first 
+    latent_im_size = [video_all.shape[-2], video_all.shape[-1]]
+    image_syn = torch.randn(size=(num_classes*args.ipc, video_all.shape[-4], video_all.shape[-3], latent_im_size[0], latent_im_size[1]), dtype=torch.float, requires_grad=False, device=args.device)
+
+    label_syn = torch.tensor(np.stack([np.ones(args.ipc)*i for i in range(0, num_classes)]), dtype=torch.long, requires_grad=False,device=args.device).view(-1) # [0,0,0, 1,1,1, ..., 9,9,9]
+
+    if args.init == 'real':
+        print('initialize synthetic data from random real images in the latent space')
+        for c in range(0, num_classes):
+            i = c 
+            image_syn.data[i*args.ipc:(i+1)*args.ipc] = get_images(c, args.ipc).detach().data
+    else:
+        print('initialize synthetic data from random noise')
+    
     vae = use_quantized_vae().to(args.device)
     vae.requires_grad_(False)
-    N = video_all.shape[0]
-    video_all = rearrange(video_all, "b f c h w -> (b f) c h w") # Merge batch & frames
+    N = image_syn.shape[0]
+    image_syn = rearrange(image_syn, "b f c h w -> (b f) c h w") # Merge batch & frames
 
-    video_all = video_all / 127.5 - 1.0
+    image_syn = image_syn / 127.5 - 1.0
     
 
     #Encode all the videos into the latent space
     encode_batch_size = 4
-    num_batches = len(video_all) // encode_batch_size + (1 if len(video_all) % encode_batch_size > 0 else 0)
+    num_batches = len(image_syn) // encode_batch_size + (1 if len(image_syn) % encode_batch_size > 0 else 0)
     video_latent = []
-    print("\nEncoding the real videos into the latent space\n")
+    print("\nEncoding the syn videos into the latent space\n")
     for i in trange(num_batches):
-        batch = video_all[i*encode_batch_size : (i+1)*encode_batch_size]
+        batch = image_syn[i*encode_batch_size : (i+1)*encode_batch_size]
         batch = batch.to(args.device)
         latents = vae.encode(batch).latent_dist.sample()
         video_latent.append(latents) 
-    video_all = torch.cat(video_latent, dim=0)
+    image_syn = torch.cat(video_latent, dim=0)
 
-    video_all = rearrange(video_all, "(b f) c h w -> b f c h w", b=N)
-    print("The tensor in the latent space with size:", video_all.shape)  # [B, T, C, H, W]
-    dst_train = torch.utils.data.TensorDataset(video_all, label_all)
+    image_syn = rearrange(image_syn, "(b f) c h w -> b f c h w", b=N)
+    print("The tensor in the latent space with size:", image_syn.shape)  # [B, T, C, H, W]
     
 
     model_eval_pool = get_eval_pool(args.eval_mode, args.model, args.model)
@@ -101,7 +132,7 @@ def main(args):
 
 
 
-    project_name = "Latent_Video_{}".format(args.method)
+    project_name = "Latent_exp_1"
 
     
     wandb.init(sync_tensorboard=False,
@@ -127,51 +158,10 @@ def main(args):
     print('Hyper-parameters: \n', args.__dict__)
     print('Evaluation model pool: ', model_eval_pool)
 
-    ''' organize the real dataset '''
-    labels_all = label_all if args.preload else dst_train.labels
-    indices_class = [[] for c in range(num_classes)]
 
-    print("BUILDING DATASET")
-    for i, lab in tqdm(enumerate(labels_all)):
-        indices_class[lab].append(i)
-    labels_all = torch.tensor(labels_all, dtype=torch.long, device="cpu")
-
-    def get_images(c, n):  # get random n images from class c
-        idx_shuffle = np.random.permutation(indices_class[c])[:n]
-        if n == 1:  
-            imgs = dst_train[idx_shuffle[0]][0].unsqueeze(0)
-        else:
-            imgs = torch.cat([dst_train[i][0].unsqueeze(0) for i in idx_shuffle], 0)
-        return imgs.to(args.device)
     
-    
-    latent_im_size = [video_all.shape[-2], video_all.shape[-1]]
-    image_syn = torch.randn(size=(num_classes*args.ipc, video_all.shape[-4], video_all.shape[-3], latent_im_size[0], latent_im_size[1]), dtype=torch.float, requires_grad=False, device=args.device)
-
-    label_syn = torch.tensor(np.stack([np.ones(args.ipc)*i for i in range(0, num_classes)]), dtype=torch.long, requires_grad=False,device=args.device).view(-1) # [0,0,0, 1,1,1, ..., 9,9,9]
-
-    #syn_lr = torch.tensor(args.lr_teacher).to(args.device) if args.method == 'MTT' else None
-
-    if args.init == 'real':
-        print('initialize synthetic data from random real images in the latent space')
-        for c in range(0, num_classes):
-            i = c 
-            image_syn.data[i*args.ipc:(i+1)*args.ipc] = get_images(c, args.ipc).detach().data
-    else:
-        print('initialize synthetic data from random noise')
- 
-
-    #torch.save(image_syn, "./logged_files/syn_tensor_1ipc.pt")
-
-    #exit()
     
     ''' training '''
-    # image_syn = image_syn.detach().to(args.device).requires_grad_(True) # [B, T, C, H, W]
-    # optimizer_img = torch.optim.SGD([image_syn, ], lr=args.lr_img, momentum=0.5) # optimizer_img for synthetic data
-    # optimizer_img.zero_grad()
-
-
-    # print('%s training begins'%get_time())
 
     best_acc = {m: 0 for m in model_eval_pool}
     best_std = {m: 0 for m in model_eval_pool}
@@ -243,38 +233,6 @@ def main(args):
                     save_this_best_ckpt = False
                     torch.save(image_save.cpu(), os.path.join(save_dir, "images_best.pt"))
 
-            """
-            net = get_network(args.model, video_all.shape[-3], num_classes, latent_im_size, frames=video_all.shape[-4]).to(args.device)  # get a random model
-            net.train()
-            for param in list(net.parameters()):
-                param.requires_grad = False
-
-            embed = net.module.embed if args.distributed else net.embed
-            
-
-            loss_avg = 0
-
-            loss = torch.tensor(0.0).to(args.device)
-            for c in range(0,num_classes):
-                img_real = get_images(c, args.batch_real)
-                img_syn = image_syn[c*args.ipc:(c+1)*args.ipc].reshape((args.ipc, video_all.shape[-4], video_all.shape[-3], latent_im_size[0], latent_im_size[1]))
-
-                # output_real = embed(img_real).detach()
-                # output_syn = embed(img_syn)
-
-                #loss += torch.sum((torch.mean(output_real, dim=0) - torch.mean(output_syn, dim=0))**2)
-                loss += torch.sum((torch.mean(img_real, dim=0) - torch.mean(img_syn, dim=0))**2)
-
-            optimizer_img.zero_grad()
-            loss.backward()
-            optimizer_img.step()
-            loss_avg += loss.item()
-
-            loss_avg /= (num_classes)
-            
-
-            wandb.log({"Loss": loss_avg}, step=it)
-            """
 
     wandb.finish()
 
