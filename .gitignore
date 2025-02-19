@@ -7,6 +7,7 @@ wandb
 __pycache__
 .DS_Store
 images
+download_dataset/rawframes
 
 # VAE models
 original_vae

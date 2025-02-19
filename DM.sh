@@ -8,7 +8,7 @@ CUDA_VISIBLE_DEVICES=${GPU} python exp1.py \
 --method DM \
 --dataset ${DATA} \
 --ipc ${IPC} \
---num_eval 3 \
+--num_eval 1 \
 --epoch_eval_train 500 \
 --init real \
 --lr_img ${LR} \

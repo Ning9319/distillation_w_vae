@@ -18,28 +18,16 @@ import torch.optim as optim
 from einops import rearrange
 from diffusers.models import AutoencoderKL
 from quantize_vae import use_quantized_vae
-import re
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 import distill_utils
 
-
-def load_indices_from_file(filename):
-    indices_class = {}
-    with open(filename, "r") as f:
-        for line in f:
-            match = re.match(r"Class (\d+): \[(.*?)\]", line)
-            if match:
-                class_id = int(match.group(1))  # Extract class ID
-                indices = list(map(int, match.group(2).split(", ")))  # Convert indices to list of integers
-                indices_class[class_id] = indices
-    return indices_class
-
 def main(args):
 
     torch.cuda.set_device(0)  # Ensure it uses the correct device
     print(f"Using GPU: {torch.cuda.get_device_name(0)}")
+
 
     print("CUDNN STATUS: {}".format(torch.backends.cudnn.enabled))
 
@@ -61,77 +49,31 @@ def main(args):
     
     video_all = torch.stack(video_all)
     label_all = torch.tensor(label_all)
-    dst_train = torch.utils.data.TensorDataset(video_all, label_all)
 
-
-    ''' Load the indices from file instead of generating them dynamically '''
-    indices_file = "./index_log/idx_shuffle_log_exp3.txt"  # Path to your indices file
-    if os.path.exists(indices_file):
-        indices_class = load_indices_from_file(indices_file)
-        print("Loaded indices from file.")
-    else:
-        print("No pre-saved indices file found! Rebuilding dataset.")
-        labels_all = label_all if args.preload else dst_train.labels
-        indices_class = [[] for _ in range(num_classes)]
-        for i, lab in tqdm(enumerate(labels_all)):
-            indices_class[lab].append(i)
-
-    ''' organize the real dataset '''
-    labels_all = label_all if args.preload else dst_train.labels
-
-    labels_all = torch.tensor(labels_all, dtype=torch.long, device="cpu")
-
-    def get_images(c, n, log_file="./index_log/idx_shuffle_log_exp1.txt"):  # get random n images from class c
-        idx_shuffle = indices_class[c][:n]  # Always pick the first `n` indices
-        
-        # Write a log file
-        with open(log_file, "a") as f:
-            f.write(f"Class {c}: {str(idx_shuffle)}\n")
-
-        if n == 1:  
-            imgs = dst_train[idx_shuffle[0]][0].unsqueeze(0)
-        else:
-            imgs = torch.cat([dst_train[i][0].unsqueeze(0) for i in idx_shuffle], 0)
-        return imgs.to(args.device)
-
-
-    # Sample the syn_video first 
-    latent_im_size = [video_all.shape[-2], video_all.shape[-1]]
-    image_syn = torch.randn(size=(num_classes*args.ipc, video_all.shape[-4], video_all.shape[-3], latent_im_size[0], latent_im_size[1]), dtype=torch.float, requires_grad=False, device=args.device)
-
-    label_syn = torch.tensor(np.stack([np.ones(args.ipc)*i for i in range(0, num_classes)]), dtype=torch.long, requires_grad=False,device=args.device).view(-1) # [0,0,0, 1,1,1, ..., 9,9,9]
-
-    if args.init == 'real':
-        print('initialize synthetic data from random real images in the pixel space')
-        for c in range(0, num_classes):
-            i = c 
-            image_syn.data[i*args.ipc:(i+1)*args.ipc] = get_images(c, args.ipc).detach().data
-    else:
-        print('initialize synthetic data from random noise')
-    
 
     vae = use_quantized_vae().to(args.device)
     vae.requires_grad_(False)
-    N = image_syn.shape[0]
-    image_syn = rearrange(image_syn, "b f c h w -> (b f) c h w") # Merge batch & frames
+    N = video_all.shape[0]
+    video_all = rearrange(video_all, "b f c h w -> (b f) c h w") # Merge batch & frames
 
-    image_syn = image_syn / 127.5 - 1.0
+    video_all = video_all / 127.5 - 1.0
     
 
     #Encode all the videos into the latent space
     encode_batch_size = 4
-    num_batches = len(image_syn) // encode_batch_size + (1 if len(image_syn) % encode_batch_size > 0 else 0)
+    num_batches = len(video_all) // encode_batch_size + (1 if len(video_all) % encode_batch_size > 0 else 0)
     video_latent = []
-    print("\nEncoding the syn videos into the latent space\n")
+    print("\nEncoding the real videos into the latent space\n")
     for i in trange(num_batches):
-        batch = image_syn[i*encode_batch_size : (i+1)*encode_batch_size]
+        batch = video_all[i*encode_batch_size : (i+1)*encode_batch_size]
         batch = batch.to(args.device)
         latents = vae.encode(batch).latent_dist.sample()
         video_latent.append(latents) 
-    image_syn = torch.cat(video_latent, dim=0)
+    video_all = torch.cat(video_latent, dim=0)
 
-    image_syn = rearrange(image_syn, "(b f) c h w -> b f c h w", b=N)
-    print("The tensor in the latent space with size:", image_syn.shape)  # [B, T, C, H, W]
+    video_all = rearrange(video_all, "(b f) c h w -> b f c h w", b=N)
+    print("The tensor in the latent space with size:", video_all.shape)  # [B, T, C, H, W]
+    dst_train = torch.utils.data.TensorDataset(video_all, label_all)
     
 
     model_eval_pool = get_eval_pool(args.eval_mode, args.model, args.model)
@@ -142,7 +84,7 @@ def main(args):
 
 
 
-    project_name = "Latent_exp_1"
+    project_name = "Latent_exp_3"
 
     
     wandb.init(sync_tensorboard=False,
@@ -168,10 +110,45 @@ def main(args):
     print('Hyper-parameters: \n', args.__dict__)
     print('Evaluation model pool: ', model_eval_pool)
 
+    ''' organize the real dataset '''
+    labels_all = label_all if args.preload else dst_train.labels
+    indices_class = [[] for c in range(num_classes)]
 
+    print("BUILDING DATASET")
+    for i, lab in tqdm(enumerate(labels_all)):
+        indices_class[lab].append(i)
+    labels_all = torch.tensor(labels_all, dtype=torch.long, device="cpu")
+
+    def get_images(c, n, log_file="./index_log/idx_shuffle_log_exp3.txt"):  # get random n images from class c
+        idx_shuffle = np.random.permutation(indices_class[c])[:n]
+        
+        # Write a log file
+        with open(log_file, "a") as f:
+            f.write(f"Class {c}: {idx_shuffle.tolist()}\n")
+
+        if n == 1:  
+            imgs = dst_train[idx_shuffle[0]][0].unsqueeze(0)
+        else:
+            imgs = torch.cat([dst_train[i][0].unsqueeze(0) for i in idx_shuffle], 0)
+        return imgs.to(args.device)
     
     
-    ''' training '''
+    latent_im_size = [video_all.shape[-2], video_all.shape[-1]]
+    image_syn = torch.randn(size=(num_classes*args.ipc, video_all.shape[-4], video_all.shape[-3], latent_im_size[0], latent_im_size[1]), dtype=torch.float, requires_grad=False, device=args.device)
+
+    label_syn = torch.tensor(np.stack([np.ones(args.ipc)*i for i in range(0, num_classes)]), dtype=torch.long, requires_grad=False,device=args.device).view(-1) # [0,0,0, 1,1,1, ..., 9,9,9]
+
+    #syn_lr = torch.tensor(args.lr_teacher).to(args.device) if args.method == 'MTT' else None
+
+    if args.init == 'real':
+        print('initialize synthetic data from random real images in the latent space')
+        for c in range(0, num_classes):
+            i = c 
+            image_syn.data[i*args.ipc:(i+1)*args.ipc] = get_images(c, args.ipc).detach().data
+    else:
+        print('initialize synthetic data from random noise')
+ 
+
 
     best_acc = {m: 0 for m in model_eval_pool}
     best_std = {m: 0 for m in model_eval_pool}
@@ -242,7 +219,6 @@ def main(args):
                 if save_this_best_ckpt:
                     save_this_best_ckpt = False
                     torch.save(image_save.cpu(), os.path.join(save_dir, "images_best.pt"))
-
 
     wandb.finish()
 

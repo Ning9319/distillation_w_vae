@@ -1,12 +1,21 @@
 #!/bin/bash
 
-# Define the main folder (change '.' to the absolute path if needed)
-MAIN_FOLDER="."
+# Get the target folder as an argument or use the current directory
+TARGET_FOLDER="./rawframes"
 
-# Find all sub-subfolders and move them to the main folder
-find "$MAIN_FOLDER" -mindepth 2 -type d -exec mv -t "$MAIN_FOLDER" {} +
+# Find all subdirectories inside the target folder (but not the target itself)
+find "$TARGET_FOLDER" -mindepth 2 -type d | while read -r dir; do
+    # Get the parent directory of the current subfolder
+    parent_dir=$(dirname "$dir")
 
-# Remove empty subdirectories
-find "$MAIN_FOLDER" -mindepth 1 -type d -empty -delete
+    # Move the subfolder to the target folder
+    mv "$dir" "$TARGET_FOLDER"
+    
+    echo "Moved $dir to $TARGET_FOLDER"
+done
 
-echo "All sub-subfolders have been moved to the main folder, and empty directories deleted."
+# Remove empty directories
+find "$TARGET_FOLDER" -type d -empty -delete
+echo "Removed all empty subfolders."
+
+echo "All nested subfolders have been moved and empty directories deleted."
